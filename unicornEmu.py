@@ -6,6 +6,7 @@ from capstone import *
 from capstone.arm import *
 from consts import arm64_registers
 from ghidraProgram import GhidraProgram
+from pyhidraEmuClient import PyhidraEmuClient
 
 
 # currently supports AARCH64
@@ -39,7 +40,7 @@ class virtCPU:
 
 # currently supports AARCH64
 class UnicornEmu:
-    def __init__(self, gp: GhidraProgram = None, start: int = None, stop: int = None, make_stack: bool = True, make_heap: bool = True, ignore_protections: bool = True):
+    def __init__(self, gp: GhidraProgram = None, start: int = None, stop: int = None, make_stack: bool = True, make_heap: bool = True, ignore_protections: bool = True, client: PyhidraEmuClient = None):
         self.PAGE_SIZE = 0x1000
         self.start = start
         self.stop = stop
@@ -53,6 +54,7 @@ class UnicornEmu:
         self.memory_map = self.init_memory_layout(ignore_protections, make_stack, make_heap)
         self.cpu = self.init_cpu()
         self.init_hooks(ignore_protections)
+        self.client: PyhidraEmuClient = client
 
 
     def init_capstone(self):
@@ -120,6 +122,9 @@ class UnicornEmu:
         return virtCPU(self.mu, self.stack_base)
 
     def hook_code(self, uc, address, size, user_data):
+        if self.client:
+            self.client.goto_address(address)
+
         code = uc.mem_read(address, size)
         instruction = list(self.cs.disasm(bytes(code), size))
 

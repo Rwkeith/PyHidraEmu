@@ -1,6 +1,5 @@
 from multiprocessing import shared_memory
-from dataclasses import dataclass
-from enum import IntEnum, Enum
+from enum import Enum
 import struct
 import time
 
@@ -9,7 +8,6 @@ class Command(Enum):
     GOTO_LISTING = b'\x02'
 
 
-@dataclass
 class Packet:
     def __init__(self, message_type, payload):
         self.message_type = message_type
@@ -25,7 +23,7 @@ class PyhidraEmuClient:
 
     def init_shared_memory(self):
         try:
-            self.server_shm = shared_memory.SharedMemory(create=True, size=10, name="pyhidraEmu")
+            self.server_shm = shared_memory.SharedMemory(create=True, size=0x100, name="pyhidraEmu")
         except:
             return False
 
@@ -33,14 +31,14 @@ class PyhidraEmuClient:
         return True
 
     def get_packet(self) -> Packet:
+        data_len = None
         packet = Packet(0, b'')
         packet.message_type = bytes(self.server_shm.buf[:1])
         if packet.message_type == Command.GOTO_LISTING.value:
             print('Received Goto Listing Packet.')
-            data = packet.payload[1:5]
+            packet.payload = bytes(self.server_shm.buf[1:])
         elif packet.message_type == Command.SHUTDOWN.value:
-            print('Received Goto Listing Packet.')
-            data = None
+            print('Received Shutdown Packet.')
 
         return packet
 
@@ -49,16 +47,19 @@ class PyhidraEmuClient:
         packet = Packet(0, b'')
         while packet.message_type != Command.SHUTDOWN:
             time.sleep(1)
-            packet: Packet = self.get_packet()
+            packet = self.get_packet()
             if packet.message_type == Command.GOTO_LISTING.value:
-                self.goto_address(packet.payload)
+                address = struct.unpack('<Q', packet.payload[4:12])[0]
+                self.goto_address(address)
 
             if packet.message_type == Command.SHUTDOWN.value:
                 self.do_shutdown()
                 break
     def goto_address(self, address: int):
-        # goTo(toAddr(address))
-        print(f'Going to address {hex(address)}')
+        if toAddr(address) != currentAddress:
+            print(f'Going to address {hex(address)}')
+            goTo(toAddr(address))
+
 
     def do_shutdown(self):
         self.server_shm.close()
