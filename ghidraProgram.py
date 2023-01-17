@@ -85,8 +85,16 @@ class GhidraProgram:
 
     def init_flat_api(self, binary_name, proj_path, proj_name):
         global g_flat_api
-        self.flat_api = pyhidra.open_program(binary_path=binary_name, project_name=proj_name ,project_location=proj_path, analyze=False)
-        project, g_flat_api = self.flat_api.__enter__()
+        project_open = False
+        while not project_open:
+            try:
+                self.flat_api = pyhidra.open_program(binary_path=binary_name, project_name=proj_name ,project_location=proj_path, analyze=False)
+                project, g_flat_api = self.flat_api.__enter__()
+                project_open = True
+            except:
+                print('[GHIDRA] Please close the project and then press Enter to continue!  Otherwise, invalid path, project name, or binary given.')
+                input()
+
         return project, g_flat_api.getCurrentProgram()
 
     def init_mem_blocks(self):
