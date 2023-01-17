@@ -1,13 +1,33 @@
 import pyhidra
 from pyhidra.launcher import DeferredPyhidraLauncher, HeadlessPyhidraLauncher
-launcher = HeadlessPyhidraLauncher(verbose=True)
+# launcher = HeadlessPyhidraLauncher(verbose=True)
+launcher = DeferredPyhidraLauncher(verbose=False)
 launcher.start()
 import ghidra
+launcher.initialize_ghidra(headless=False)
 from ghidra.program.flatapi import FlatProgramAPI
 from ghidra.base.project import GhidraProject
 from ghidra.program.model.mem import MemoryBlock
+from javax.swing import SwingUtilities
+from ghidra.program.util import ProgramLocation
+
+import contextlib
+import sys
+
+class DummyFile(object):
+    def write(self, x): pass
+
+@contextlib.contextmanager
+def nostdout():
+    save_stdout = sys.stdout
+    sys.stdout = DummyFile()
+    yield
+    sys.stdout = save_stdout
+
 
 g_flat_api = None
+g_program = None
+g_project = None
 
 class MemBlock:
     def __init__(self, mem_block: MemoryBlock = None, **kwargs):
@@ -40,17 +60,34 @@ class MemBlock:
 
 class GhidraProgram:
     def __init__(self, binary_name, proj_path, proj_name):
+        global g_program
+        global g_project
         self.flat_api = None
-        self.program = self.init_flat_api(binary_name, proj_path, proj_name)
+        self.project, self.program = self.init_flat_api(binary_name, proj_path, proj_name)
+        g_program = self.program
+        g_project = self.project
+        self.code_browser, self.code_browser_component = self.launch_codebrowser()
         self.memory = self.program.getMemory()
         self.generic_mem_blocks = self.init_mem_blocks()
 
+    def goto_address(self, address):
+        # test run without gui updating, is 0.7s
+        progLocation = ProgramLocation(g_program, g_flat_api.toAddr(address))
+
+        # 10.6s runtime
+        def myRunnable():
+            self.code_browser_component.goTo(g_program, progLocation)
+
+        SwingUtilities.invokeAndWait(myRunnable)
+
+        # without swing thread, 6.9s runtime
+        # self.code_browser_component.goTo(g_program, progLocation)
 
     def init_flat_api(self, binary_name, proj_path, proj_name):
         global g_flat_api
         self.flat_api = pyhidra.open_program(binary_path=binary_name, project_name=proj_name ,project_location=proj_path, analyze=False)
-        g_flat_api = self.flat_api.__enter__()
-        return g_flat_api.getCurrentProgram()
+        project, g_flat_api = self.flat_api.__enter__()
+        return project, g_flat_api.getCurrentProgram()
 
     def init_mem_blocks(self):
         mem_blocks = self.memory.getBlocks()
@@ -67,4 +104,31 @@ class GhidraProgram:
     def print_memory_layout(self):
         for mem_block in self.generic_mem_blocks:
             print(f"Name: {mem_block.name} Start: {hex(mem_block.start)} End: {hex(mem_block.end)} Size: {hex(mem_block.size)}")
-        
+
+    def launch_codebrowser(self):
+        localToolChest = self.project.getProjectManager().activeProject.getLocalToolChest()
+        ltt = localToolChest.getToolTemplates()
+
+        def myRunnable():
+            ltt[0].createTool(g_project.project)
+
+        SwingUtilities.invokeAndWait(myRunnable)
+
+        ws = g_project.getProjectManager().activeProject.getToolManager().getWorkspaces()
+        def myRunnable1():
+            # tools[0].toolServices.launchTool('CodeBrowser', self.program.getDomainFile())
+            ws[0].runTool(ltt[0])
+
+        SwingUtilities.invokeAndWait(myRunnable1)
+        tools = ws[0].getTools()
+        def myRunnable2():
+            tools[0].toolServices.launchTool('CodeBrowser', g_program.getDomainFile())
+
+        SwingUtilities.invokeAndWait(myRunnable2)
+
+        tools = ws[0].getTools()
+        for tool in tools:
+            if tool.getDefaultToolContext():
+                return tool, tool.getDefaultToolContext().getGlobalContext().getContextObject().componentProvider
+        print('[PYHYDRIA-EMU] Unable to locate CodeBrowser tool with loaded program!')
+        raise ValueError()

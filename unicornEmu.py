@@ -7,6 +7,7 @@ from capstone.arm import *
 from consts import arm64_registers
 from ghidraProgram import GhidraProgram
 from pyhidraEmuClient import PyhidraEmuClient
+import time
 
 
 # currently supports AARCH64
@@ -40,7 +41,7 @@ class virtCPU:
 
 # currently supports AARCH64
 class UnicornEmu:
-    def __init__(self, gp: GhidraProgram = None, start: int = None, stop: int = None, make_stack: bool = True, make_heap: bool = True, ignore_protections: bool = True, client: PyhidraEmuClient = None):
+    def __init__(self, gp: GhidraProgram = None, start: int = None, stop: int = None, make_stack: bool = True, make_heap: bool = True, ignore_protections: bool = True, client: PyhidraEmuClient = None, execution_delay: float = 1):
         self.PAGE_SIZE = 0x1000
         self.start = start
         self.stop = stop
@@ -55,6 +56,7 @@ class UnicornEmu:
         self.cpu = self.init_cpu()
         self.init_hooks(ignore_protections)
         self.client: PyhidraEmuClient = client
+        self.execution_delay = execution_delay
 
 
     def init_capstone(self):
@@ -122,8 +124,12 @@ class UnicornEmu:
         return virtCPU(self.mu, self.stack_base)
 
     def hook_code(self, uc, address, size, user_data):
+        if self.execution_delay:
+            time.sleep(self.execution_delay)
+
         if self.client:
-            self.client.goto_address(address)
+            self.gp.goto_address(address)
+        #     self.client.goto_address(address)
 
         code = uc.mem_read(address, size)
         instruction = list(self.cs.disasm(bytes(code), size))
@@ -160,10 +166,13 @@ class UnicornEmu:
     def run_emulation(self):
         try:
             self.cpu.print_context()
+            start_time = time.time()
             self.mu.emu_start(self.start, self.stop)
         except UcError as e:
             self.cpu.print_context()
             print(f"UcError occured! {e.errno} , {e.args}")
             raise e
 
+        total_time =  time.time() - start_time
+        print(f"[PYHIDRA-EMU] Total Emulation Time: {total_time}s")
         print("EMULATION COMPLETED SUCCESSFULLY!")

@@ -6,6 +6,7 @@ import threading
 from ghidra.app.script import GhidraState
 from ghidra.app.script import GhidraScript
 
+
 class Command(Enum):
     SHUTDOWN = b'\x01'
     GOTO_LISTING = b'\x02'
@@ -52,7 +53,7 @@ class PyhidraEmuServer(threading.Thread):
         packet = Packet(0, b'')
         packet.message_type = bytes(self.server_shm.buf[:1])
         if packet.message_type == Command.GOTO_LISTING.value:
-            print('Received Goto Listing Packet.')
+            # print('Received Goto Listing Packet.')
             packet.payload = bytes(self.server_shm.buf[1:])
         elif packet.message_type == Command.SHUTDOWN.value:
             print('Received Shutdown Packet.')
@@ -63,7 +64,7 @@ class PyhidraEmuServer(threading.Thread):
         print("[PYHIDRAEMU-SERVER] Entered main command handler")
         packet = Packet(0, b'')
         while packet.message_type != Command.SHUTDOWN:
-            time.sleep(1)
+            time.sleep(0.1)
             packet = self.get_packet()
             if packet.message_type == Command.GOTO_LISTING.value:
                 address = struct.unpack('<Q', packet.payload[4:12])[0]
@@ -75,7 +76,7 @@ class PyhidraEmuServer(threading.Thread):
     def goto_address(self, address: int):
         # gs = getState()
         addrObj = toAddr(address)
-        print(f"currentAddress: {hex(int(currentAddress.toString(), 16))} , addrObj: {hex(int(addrObj.toString(), 16))}")
+        # print(f"currentAddress: {hex(int(currentAddress.toString(), 16))} , addrObj: {hex(int(addrObj.toString(), 16))}")
         if self.last_goto_addr != address:
             self.last_goto_addr = address
             print(f'Going to address {hex(address)}')
