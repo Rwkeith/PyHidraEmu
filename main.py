@@ -25,7 +25,7 @@ def main():
     gp = GhidraProgram(binary_name=args.bin, proj_path=args.path, proj_name=args.proj_name)
     MAIN_START = 0x004006d4
     MAIN_END = 0x00400724
-    emu = UnicornEmu(gp=gp, start=MAIN_START, stop=MAIN_END, client=True, execution_delay=0)
+    emu = UnicornEmu(gp=gp, start=MAIN_START, stop=MAIN_END, client=True, execution_delay=0, showGUI=args.gui)
     emu.run_emulation()
 
 if __name__ == '__main__':

@@ -8,19 +8,27 @@ from consts import arm64_registers
 from ghidraProgram import GhidraProgram
 from pyhidraEmuClient import PyhidraEmuClient
 import time
+from unicornWindow import UnicornWindow
+import pydevd
 
 
 # currently supports AARCH64
 class virtCPU:
     def __init__(self, mu: Uc = None, sp: int = None):
         self.mu = mu
+        self.context = {}
         if sp:
             self.mu.reg_write(UC_ARM64_REG_SP, sp)
+        self.update_context()
+
+    def update_context(self):
+        for reg in arm64_registers:
+            self.context[reg] = self.mu.reg_read(arm64_registers[reg])
 
     def print_context(self):
+        self.update_context()
         print('Unicorn register context:')
-        for reg in arm64_registers:
-            reg_val = self.mu.reg_read(arm64_registers[reg])
+        for reg, reg_val in self.context.items():
             print(f'{reg} : {hex(reg_val)}')
 
     def set_pstate(self):
@@ -38,10 +46,18 @@ class virtCPU:
         spsr_el3 |= 0b01101
         self.mu.reg_write(UC_ARM64_REG_CP_REG, (0b0100, 0b0000, 0b11, 0b110, 0b000, spsr_el3))
 
+    def set_register(self, reg, value: str):
+        if value.startswith('0x'):
+            value = int(value, 16)
+        else:
+            value = int(value)
+        self.mu.reg_write(arm64_registers[reg], value)
+        self.context[reg] = value
+
 
 # currently supports AARCH64
 class UnicornEmu:
-    def __init__(self, gp: GhidraProgram = None, start: int = None, stop: int = None, make_stack: bool = True, make_heap: bool = True, ignore_protections: bool = True, client: PyhidraEmuClient = None, execution_delay: float = 1):
+    def __init__(self, gp: GhidraProgram = None, start: int = None, stop: int = None, make_stack: bool = True, make_heap: bool = True, ignore_protections: bool = True, client: PyhidraEmuClient = None, execution_delay: float = 1, showGUI: bool = True):
         self.PAGE_SIZE = 0x1000
         self.start = start
         self.stop = stop
@@ -57,6 +73,9 @@ class UnicornEmu:
         self.init_hooks(ignore_protections)
         self.client: PyhidraEmuClient = client
         self.execution_delay = execution_delay
+
+        if showGUI:
+            self.unicorn_window = UnicornWindow(self.cpu, self.memory_map)
 
 
     def init_capstone(self):
@@ -124,6 +143,7 @@ class UnicornEmu:
         return virtCPU(self.mu, self.stack_base)
 
     def hook_code(self, uc, address, size, user_data):
+        pydevd.settrace()
         if self.execution_delay:
             time.sleep(self.execution_delay)
 
